@@ -37,6 +37,18 @@ docker compose up frontend-dev
 http://localhost:5173
 ```
 
+Запустить production-сборку через nginx:
+
+```bash
+docker compose up --build frontend-prod
+```
+
+Production-версия будет доступна по адресу:
+
+```text
+http://localhost:8080
+```
+
 Остановить контейнеры:
 
 ```bash
@@ -66,6 +78,15 @@ cd frontend
 docker compose run --rm frontend-e2e
 ```
 
+Проверка production-контейнера:
+
+```bash
+cd frontend
+docker compose up --build -d frontend-prod
+curl -I http://localhost:8080
+docker compose down
+```
+
 Локально, без Docker:
 
 ```bash
@@ -93,6 +114,10 @@ VITE_DEFAULT_MODEL=default
 - `VITE_API_MODE=mock|real` задает источник ответа ассистента.
 - `VITE_HISTORY_MODE=local|remote` задает источник истории чатов.
 - `VITE_DEFAULT_MODEL` задает модель для OpenAI-compatible-like запроса к backend.
+
+В dev-контейнере эти переменные передаются как runtime environment для Vite dev server.
+
+В production-контейнере Vite подставляет `VITE_*` на этапе `npm run build`. Поэтому для `frontend-prod` переменные передаются через Docker build args. Изменение `VITE_API_BASE_URL` после сборки nginx-контейнера не изменит уже собранный frontend. Runtime-конфигурация через отдельный `config.json` не входит в MVP.
 
 ## API
 
