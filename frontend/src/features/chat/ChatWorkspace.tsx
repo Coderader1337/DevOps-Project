@@ -1,22 +1,36 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
-import { runtimeConfig } from '../../shared/api';
+import {
+  createAssistantApi,
+  runtimeConfig,
+  type AssistantApi,
+  type ChatCompletionMessage,
+} from '../../shared/api';
 import {
   createChatStorage,
   type Chat,
   type ChatStorage,
+  type Message,
 } from '../../shared/storage';
 
 const defaultChatStorage = createChatStorage();
+const defaultAssistantApi = createAssistantApi();
 
 interface ChatWorkspaceProps {
+  assistantApi?: AssistantApi;
   storage?: ChatStorage;
 }
 
-export function ChatWorkspace({ storage = defaultChatStorage }: ChatWorkspaceProps) {
+export function ChatWorkspace({
+  assistantApi = defaultAssistantApi,
+  storage = defaultChatStorage,
+}: ChatWorkspaceProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [draftMessage, setDraftMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const activeChat = useMemo(
@@ -59,6 +73,36 @@ export function ChatWorkspace({ storage = defaultChatStorage }: ChatWorkspacePro
     };
   }, [storage]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadMessages() {
+      if (!activeChatId) {
+        setMessages([]);
+        return;
+      }
+
+      try {
+        setError(null);
+        const loadedMessages = await storage.getMessages(activeChatId);
+
+        if (isMounted) {
+          setMessages(loadedMessages);
+        }
+      } catch {
+        if (isMounted) {
+          setError('Не удалось загрузить сообщения диалога.');
+        }
+      }
+    }
+
+    void loadMessages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeChatId, storage]);
+
   async function handleCreateChat() {
     try {
       setError(null);
@@ -71,6 +115,54 @@ export function ChatWorkspace({ storage = defaultChatStorage }: ChatWorkspacePro
       setError('Не удалось создать новый чат.');
     }
   }
+
+  async function handleSubmitMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const content = draftMessage.trim();
+
+    if (!content || !activeChatId || isSending) {
+      return;
+    }
+
+    try {
+      setError(null);
+      setIsSending(true);
+      setDraftMessage('');
+
+      const userMessage = await storage.addMessage({
+        chatId: activeChatId,
+        role: 'user',
+        content,
+      });
+      const nextMessages = [...messages, userMessage];
+
+      setMessages(nextMessages);
+      setChats(await storage.listChats());
+
+      const completion = await assistantApi.createChatCompletion({
+        model: runtimeConfig.defaultModel,
+        messages: toChatCompletionMessages(nextMessages),
+      });
+      const assistantContent =
+        completion.choices[0]?.message.content.trim() ||
+        'Не удалось получить текст ответа.';
+      const assistantMessage = await storage.addMessage({
+        chatId: activeChatId,
+        role: 'assistant',
+        content: assistantContent,
+      });
+
+      setMessages([...nextMessages, assistantMessage]);
+      setChats(await storage.listChats());
+    } catch {
+      setError('Не удалось получить ответ ассистента. Попробуйте еще раз.');
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  const canSendMessage = Boolean(activeChatId && draftMessage.trim() && !isSending);
 
   return (
     <main className="min-h-screen bg-paper-50 text-ink-950">
@@ -158,26 +250,109 @@ export function ChatWorkspace({ storage = defaultChatStorage }: ChatWorkspacePro
             </h2>
           </div>
 
-          <div className="flex flex-1 items-center justify-center px-5 py-10">
-            <div className="max-w-xl text-center">
-              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-moss-600">
-                {activeChat ? 'Диалог выбран' : 'Пока нет активного диалога'}
-              </p>
-              <p className="mt-3 text-base leading-7 text-ink-700">
-                {activeChat
-                  ? 'Сообщения и поле ввода появятся в следующей версии.'
-                  : 'Создайте новый чат в боковой панели, чтобы начать работу.'}
-              </p>
-              {error ? (
-                <p className="mt-4 rounded-panel border border-signal-500/30 bg-signal-500/10 px-4 py-3 text-sm text-ink-900">
-                  {error}
-                </p>
-              ) : null}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
+              {!activeChat ? (
+                <EmptyChatState text="Создайте новый чат в боковой панели, чтобы начать работу." />
+              ) : messages.length > 0 ? (
+                <div className="mx-auto flex max-w-3xl flex-col gap-4">
+                  {messages.map((message) => (
+                    <MessageBubble message={message} key={message.id} />
+                  ))}
+                  {isSending ? <AssistantLoading /> : null}
+                </div>
+              ) : (
+                <EmptyChatState text="Напишите первое сообщение, чтобы начать диалог." />
+              )}
             </div>
+
+            {error ? (
+              <div className="border-t border-signal-500/20 bg-signal-500/10 px-5 py-3 text-sm text-ink-900">
+                {error}
+              </div>
+            ) : null}
+
+            <form
+              className="border-t border-ink-950/10 bg-paper-50 px-4 py-4 lg:px-6"
+              onSubmit={handleSubmitMessage}
+            >
+              <div className="mx-auto flex max-w-3xl gap-3">
+                <label className="sr-only" htmlFor="chat-message-input">
+                  Сообщение
+                </label>
+                <textarea
+                  className="min-h-12 flex-1 resize-none rounded-panel border border-ink-950/15 bg-white px-4 py-3 text-sm leading-6 text-ink-950 shadow-sm transition placeholder:text-ink-700/50 focus:border-moss-600"
+                  disabled={!activeChat || isSending}
+                  id="chat-message-input"
+                  onChange={(event) => setDraftMessage(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  placeholder={
+                    activeChat
+                      ? 'Введите сообщение'
+                      : 'Сначала создайте или выберите чат'
+                  }
+                  rows={1}
+                  value={draftMessage}
+                />
+                <button
+                  className="h-12 rounded-panel bg-moss-600 px-5 text-sm font-semibold text-paper-50 transition hover:bg-moss-500 disabled:cursor-not-allowed disabled:bg-ink-700/30 disabled:text-ink-700/60"
+                  disabled={!canSendMessage}
+                  type="submit"
+                >
+                  Отправить
+                </button>
+              </div>
+            </form>
           </div>
         </section>
       </div>
     </main>
+  );
+}
+
+function EmptyChatState({ text }: { text: string }) {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="max-w-xl text-center">
+        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-moss-600">
+          Пустой чат
+        </p>
+        <p className="mt-3 text-base leading-7 text-ink-700">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({ message }: { message: Message }) {
+  const isUser = message.role === 'user';
+
+  return (
+    <article className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[78%] rounded-panel px-4 py-3 text-sm leading-6 shadow-sm ${
+          isUser
+            ? 'bg-ink-950 text-paper-50'
+            : 'border border-ink-950/10 bg-white text-ink-900'
+        }`}
+      >
+        <p className="whitespace-pre-wrap">{message.content}</p>
+      </div>
+    </article>
+  );
+}
+
+function AssistantLoading() {
+  return (
+    <div className="flex justify-start" role="status">
+      <div className="rounded-panel border border-ink-950/10 bg-white px-4 py-3 text-sm text-ink-700 shadow-sm">
+        Ассистент отвечает...
+      </div>
+    </div>
   );
 }
 
@@ -188,4 +363,11 @@ function formatChatDate(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+function toChatCompletionMessages(messages: Message[]): ChatCompletionMessage[] {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
 }
