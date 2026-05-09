@@ -76,10 +76,12 @@ npm run test
 VITE_API_MODE=mock
 VITE_HISTORY_MODE=local
 VITE_API_BASE_URL=http://localhost:8080
+VITE_DEFAULT_MODEL=default
 ```
 
 - `VITE_API_MODE=mock|real` задает источник ответа ассистента.
 - `VITE_HISTORY_MODE=local|remote` задает источник истории чатов.
+- `VITE_DEFAULT_MODEL` задает модель для OpenAI-compatible-like запроса к backend.
 
 ## API
 
