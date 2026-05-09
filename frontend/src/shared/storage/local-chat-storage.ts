@@ -13,6 +13,7 @@ interface ChatStorageState {
 export interface ChatStorage {
   listChats(): Promise<Chat[]>;
   createChat(input?: CreateChatInput): Promise<Chat>;
+  deleteChat(chatId: string): Promise<void>;
   getMessages(chatId: string): Promise<Message[]>;
   addMessage(input: CreateMessageInput): Promise<Message>;
   clear(): Promise<void>;
@@ -62,6 +63,17 @@ export class LocalChatStorage implements ChatStorage {
     });
 
     return chat;
+  }
+
+  async deleteChat(chatId: string): Promise<void> {
+    const state = this.readState();
+    const { [chatId]: _deletedMessages, ...messagesByChatId } =
+      state.messagesByChatId;
+
+    this.writeState({
+      chats: state.chats.filter((chat) => chat.id !== chatId),
+      messagesByChatId,
+    });
   }
 
   async getMessages(chatId: string): Promise<Message[]> {

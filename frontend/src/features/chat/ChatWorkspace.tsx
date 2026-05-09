@@ -116,6 +116,37 @@ export function ChatWorkspace({
     }
   }
 
+  async function handleDeleteChat(chatId: string) {
+    try {
+      setError(null);
+      await storage.deleteChat(chatId);
+      const updatedChats = await storage.listChats();
+
+      setChats(updatedChats);
+
+      if (chatId === activeChatId) {
+        setActiveChatId(updatedChats[0]?.id ?? null);
+        setMessages([]);
+        setDraftMessage('');
+      }
+    } catch {
+      setError('Не удалось удалить чат.');
+    }
+  }
+
+  async function handleClearHistory() {
+    try {
+      setError(null);
+      await storage.clear();
+      setChats([]);
+      setActiveChatId(null);
+      setMessages([]);
+      setDraftMessage('');
+    } catch {
+      setError('Не удалось очистить историю.');
+    }
+  }
+
   async function handleSubmitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -202,27 +233,43 @@ export function ChatWorkspace({
 
                     return (
                       <li className="min-w-48 lg:min-w-0" key={chat.id}>
-                        <button
-                          aria-current={isActive ? 'page' : undefined}
-                          className={`w-full rounded-panel px-3 py-2 text-left text-sm transition ${
+                        <div
+                          className={`flex items-stretch gap-1 rounded-panel transition ${
                             isActive
                               ? 'bg-paper-50 text-ink-950 shadow-soft'
                               : 'text-paper-200/80 hover:bg-paper-50/10 hover:text-paper-50'
                           }`}
-                          onClick={() => setActiveChatId(chat.id)}
-                          type="button"
                         >
-                          <span className="block truncate font-medium">
-                            {chat.title}
-                          </span>
-                          <span
-                            className={`mt-1 block text-xs ${
-                              isActive ? 'text-ink-700' : 'text-paper-200/50'
-                            }`}
+                          <button
+                            aria-current={isActive ? 'page' : undefined}
+                            className="min-w-0 flex-1 rounded-panel px-3 py-2 text-left text-sm"
+                            onClick={() => setActiveChatId(chat.id)}
+                            type="button"
                           >
-                            {formatChatDate(chat.updatedAt)}
-                          </span>
-                        </button>
+                            <span className="block truncate font-medium">
+                              {chat.title}
+                            </span>
+                            <span
+                              className={`mt-1 block text-xs ${
+                                isActive ? 'text-ink-700' : 'text-paper-200/50'
+                              }`}
+                            >
+                              {formatChatDate(chat.updatedAt)}
+                            </span>
+                          </button>
+                          <button
+                            aria-label={`Удалить чат ${chat.title}`}
+                            className={`my-1 mr-1 rounded-panel px-2 text-xs font-semibold transition ${
+                              isActive
+                                ? 'text-ink-700 hover:bg-ink-950/10 hover:text-ink-950'
+                                : 'text-paper-200/50 hover:bg-paper-50/10 hover:text-paper-50'
+                            }`}
+                            onClick={() => void handleDeleteChat(chat.id)}
+                            type="button"
+                          >
+                            Удалить
+                          </button>
+                        </div>
                       </li>
                     );
                   })}
@@ -233,6 +280,15 @@ export function ChatWorkspace({
                 </p>
               )}
             </nav>
+
+            <button
+              className="rounded-panel border border-paper-200/15 px-4 py-2 text-left text-sm font-semibold text-paper-200/80 transition hover:bg-paper-50/10 hover:text-paper-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={chats.length === 0}
+              onClick={handleClearHistory}
+              type="button"
+            >
+              Очистить историю
+            </button>
 
             <div className="hidden text-xs leading-relaxed text-paper-200/60 lg:block">
               API: {runtimeConfig.apiMode} · History: {runtimeConfig.historyMode}
