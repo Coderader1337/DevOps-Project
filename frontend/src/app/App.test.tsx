@@ -35,7 +35,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: /новый чат/i }));
 
     const chatButtons = await screen.findAllByRole('button', {
-      name: /новый чат/i,
+      name: /^новый чат/i,
     });
 
     expect(chatButtons).toHaveLength(2);
@@ -51,10 +51,10 @@ describe('App', () => {
     render(<App />);
 
     const firstChatButton = await screen.findByRole('button', {
-      name: new RegExp(firstChat.title, 'i'),
+      name: new RegExp(`^${firstChat.title}`, 'i'),
     });
     const secondChatButton = await screen.findByRole('button', {
-      name: new RegExp(secondChat.title, 'i'),
+      name: new RegExp(`^${secondChat.title}`, 'i'),
     });
 
     await user.click(firstChatButton);
@@ -76,7 +76,7 @@ describe('App', () => {
     render(<App />);
 
     expect(
-      await screen.findByRole('button', { name: /сохраненный диалог/i }),
+      await screen.findByRole('button', { name: /^сохраненный диалог/i }),
     ).toBeInTheDocument();
   });
 });

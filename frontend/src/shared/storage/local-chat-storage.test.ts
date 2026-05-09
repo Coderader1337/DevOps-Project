@@ -66,4 +66,34 @@ describe('LocalChatStorage', () => {
       }),
     ]);
   });
+
+  it('deletes one chat with its messages', async () => {
+    const firstChat = await storage.createChat({ title: 'Первый чат' });
+    const secondChat = await storage.createChat({ title: 'Второй чат' });
+
+    await storage.addMessage({
+      chatId: firstChat.id,
+      role: 'user',
+      content: 'Удалить меня',
+    });
+
+    await storage.deleteChat(firstChat.id);
+
+    await expect(storage.listChats()).resolves.toEqual([secondChat]);
+    await expect(storage.getMessages(firstChat.id)).resolves.toEqual([]);
+  });
+
+  it('clears all local chat history', async () => {
+    const chat = await storage.createChat({ title: 'История' });
+
+    await storage.addMessage({
+      chatId: chat.id,
+      role: 'user',
+      content: 'Сообщение',
+    });
+    await storage.clear();
+
+    await expect(storage.listChats()).resolves.toEqual([]);
+    await expect(storage.getMessages(chat.id)).resolves.toEqual([]);
+  });
 });

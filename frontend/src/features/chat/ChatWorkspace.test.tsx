@@ -169,4 +169,62 @@ describe('ChatWorkspace messages', () => {
     expect(await screen.findByText('Сохраненный вопрос')).toBeInTheDocument();
     expect(await screen.findByText('Сохраненный ответ')).toBeInTheDocument();
   });
+
+  it('deletes one chat from the page', async () => {
+    const user = userEvent.setup();
+    const storage = createStorage();
+
+    await storage.createChat({ title: 'Первый чат' });
+    await storage.createChat({ title: 'Второй чат' });
+
+    render(
+      <ChatWorkspace
+        assistantApi={createAssistantApi(async () => createAssistantResponse())}
+        storage={storage}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('button', { name: /^Первый чат/i }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: /удалить чат первый чат/i }),
+    );
+
+    expect(
+      screen.queryByRole('button', { name: /^Первый чат/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^Второй чат/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('clears all chat history from the page', async () => {
+    const user = userEvent.setup();
+    const storage = createStorage();
+    const chat = await storage.createChat({ title: 'История' });
+
+    await storage.addMessage({
+      chatId: chat.id,
+      role: 'user',
+      content: 'Вопрос из истории',
+    });
+
+    render(
+      <ChatWorkspace
+        assistantApi={createAssistantApi(async () => createAssistantResponse())}
+        storage={storage}
+      />,
+    );
+
+    expect(await screen.findByText('Вопрос из истории')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /очистить историю/i }));
+
+    expect(screen.queryByText('Вопрос из истории')).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(/диалоги появятся здесь/i),
+    ).toBeInTheDocument();
+  });
 });
