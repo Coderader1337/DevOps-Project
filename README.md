@@ -15,6 +15,7 @@
 - Vitest;
 - React Testing Library;
 - jsdom;
+- Playwright;
 - Docker Compose.
 
 
@@ -58,6 +59,13 @@ cd frontend
 docker compose run --rm frontend-dev npm run test
 ```
 
+E2E-тесты в согласованном Playwright-контейнере:
+
+```bash
+cd frontend
+docker compose run --rm frontend-e2e
+```
+
 Локально, без Docker:
 
 ```bash
@@ -66,7 +74,10 @@ npm install
 npm run dev
 npm run build
 npm run test
+npm run test:e2e
 ```
+
+Перед каждым e2e-сценарием локальное состояние приложения очищается, поэтому тест начинается с пустой истории чатов.
 
 ## Переменные окружения frontend
 
