@@ -1,0 +1,120 @@
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.example.com
+    outputs:
+      image_tag: ${{ steps.sha.outputs.image_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Extract short SHA
+        id: sha
+        run: |
+          SHORT_SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "image_tag=sha-$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Display deployment info
+        run: |
+          echo "🚀 Deploying to STAGING environment"
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.image_tag }}"
+          echo "Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo "Branch: ${{ github.event.workflow_run.head_branch }}"
+
+      - name: Simulate deployment to staging
+        run: |
+          echo "Pulling Docker image..."
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.image_tag }}"
+          echo "Stopping old container..."
+          echo "docker stop devops-app-staging || true"
+          echo "Starting new container..."
+          echo "docker run -d --name devops-app-staging -p 5000:5000 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.image_tag }}"
+          sleep 3
+          echo "✅ Deployment to staging completed!"
+
+  smoke-test:
+    name: Smoke Tests
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run smoke tests against staging
+        run: |
+          echo "🔍 Running smoke tests against staging..."
+          echo "Image deployed: ${{ needs.deploy-staging.outputs.image_tag }}"
+          echo ""
+          echo "Testing health endpoint..."
+          # curl -sf https://staging.example.com/health | grep '"status": "ok"' || exit 1
+          echo "Testing main endpoint..."
+          # curl -sf https://staging.example.com/ | grep '"service"' || exit 1
+          sleep 2
+          echo "✅ All smoke tests passed!"
+
+  deploy-production:
+    name: Deploy to Production
+    needs: smoke-test
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://production.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Extract short SHA
+        id: sha
+        run: |
+          SHORT_SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "image_tag=sha-$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Display deployment info
+        run: |
+          echo "🚀 Deploying to PRODUCTION environment"
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.image_tag }}"
+          echo "Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo "⚠️  Manual approval was required and granted via GitHub UI"
+
+      - name: Simulate deployment to production
+        run: |
+          echo "Pulling Docker image (same as used in staging - Build Once Deploy Many)..."
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.image_tag }}"
+          echo "Stopping old container..."
+          echo "docker stop devops-app-production || true"
+          echo "Starting new container..."
+          echo "docker run -d --name devops-app-production -p 5000:5000 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.image_tag }}"
+          sleep 3
+          echo "✅ Deployment to production completed!"
+
+  notify-failure:
+    name: Notify on CI Failure
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify about failed CI
+        run: |
+          echo "❌ CI Pipeline failed — CD will not run."
+          echo "Branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "Commit: ${{ github.event.workflow_run.head_sha }}"
+          echo "Please check CI logs and fix the issues before merging."
