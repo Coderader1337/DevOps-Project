@@ -1,5 +1,6 @@
 import os
 import socket
+
 from flask import Flask, jsonify
 
 app = Flask(__name__)
@@ -12,11 +13,7 @@ HOSTNAME = socket.gethostname()
 @app.route("/")
 def index():
     """Main endpoint returning service info."""
-    return jsonify({
-        "service": SERVICE_NAME,
-        "version": VERSION,
-        "hostname": HOSTNAME,
-    })
+    return jsonify({"service": SERVICE_NAME, "version": VERSION, "hostname": HOSTNAME})
 
 
 @app.route("/health")
@@ -31,17 +28,19 @@ def greeting():
     feature_flag = os.environ.get("FEATURE_NEW_GREETING", "false").lower() == "true"
 
     if feature_flag:
-        return jsonify({
+        response = {
             "message": "Welcome to our new DevOps platform!",
             "version": "2.0",
             "feature_enabled": True,
-        })
+        }
     else:
-        return jsonify({
+        response = {
             "message": "Hello from DevOps App!",
             "version": "1.0",
             "feature_enabled": False,
-        })
+        }
+
+    return jsonify(response)
 
 
 if __name__ == "__main__":
