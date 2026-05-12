@@ -15,7 +15,7 @@ def index():
     return jsonify({
         "service": SERVICE_NAME,
         "version": VERSION,
-        "hostname": HOSTNAME
+        "hostname": HOSTNAME,
     })
 
 
@@ -34,13 +34,13 @@ def greeting():
         return jsonify({
             "message": "Welcome to our new DevOps platform!",
             "version": "2.0",
-            "feature_enabled": True
+            "feature_enabled": True,
         })
     else:
         return jsonify({
             "message": "Hello from DevOps App!",
             "version": "1.0",
-            "feature_enabled": False
+            "feature_enabled": False,
         })
 
 
