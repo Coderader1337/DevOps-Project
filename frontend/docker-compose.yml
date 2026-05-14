@@ -1,4 +1,29 @@
 services:
+  nginx:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    depends_on:
+      - frontend-prod
+    ports:
+      - "80:8080"
+      - "443:8443"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./nginx/edge.conf:/etc/nginx/conf.d/default.conf:ro
+    secrets:
+      - nginx_tls_cert
+      - nginx_tls_key
+    networks:
+      - frontend_public
+      - frontend_api
+
   frontend-dev:
     build:
       context: .
@@ -27,8 +52,8 @@ services:
         VITE_HISTORY_MODE: ${VITE_HISTORY_MODE:-local}
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
         VITE_DEFAULT_MODEL: ${VITE_DEFAULT_MODEL:-default}
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     read_only: true
     tmpfs:
       - /tmp
@@ -39,7 +64,6 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - frontend_public
       - frontend_api
 
   frontend-e2e:
@@ -61,6 +85,12 @@ services:
 volumes:
   frontend_node_modules:
   frontend_e2e_node_modules:
+
+secrets:
+  nginx_tls_cert:
+    file: ./certs/local.crt
+  nginx_tls_key:
+    file: ./certs/local.key
 
 networks:
   frontend_public:

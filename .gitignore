@@ -4,6 +4,9 @@ coverage
 .env
 .env.local
 .env.*.local
+frontend/certs/*.crt
+frontend/certs/*.key
+frontend/certs/*.pem
 .vite
 playwright-report
 test-results

@@ -6,6 +6,9 @@ coverage
 .env
 .env.local
 .env.*.local
+certs/*.crt
+certs/*.key
+certs/*.pem
 playwright-report
 test-results
 npm-debug.log*

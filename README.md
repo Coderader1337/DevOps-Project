@@ -1,8 +1,6 @@
 # DevOps Project
 
-
 ## Структура проекта
-
 
 ## Frontend
 
@@ -17,7 +15,6 @@
 - jsdom;
 - Playwright;
 - Docker Compose.
-
 
 Перейти в frontend:
 
@@ -37,16 +34,28 @@ docker compose up frontend-dev
 http://localhost:5173
 ```
 
-Запустить production-сборку через nginx:
+Создать локальный самоподписанный TLS-сертификат для edge nginx:
 
 ```bash
-docker compose up --build frontend-prod
+mkdir -p certs
+openssl req -x509 -nodes -newkey rsa:2048 \
+  -keyout certs/local.key \
+  -out certs/local.crt \
+  -days 365 \
+  -subj "/CN=localhost"
+chmod 0444 certs/local.crt certs/local.key
+```
+
+Запустить production-сборку через единую nginx-точку входа:
+
+```bash
+docker compose up --build nginx
 ```
 
 Production-версия будет доступна по адресу:
 
 ```text
-http://localhost:8080
+https://localhost
 ```
 
 Остановить контейнеры:
@@ -54,6 +63,10 @@ http://localhost:8080
 ```bash
 docker compose down
 ```
+
+Сервис `nginx` принимает внешние HTTP/HTTPS-запросы на портах `80` и `443`, перенаправляет HTTP на HTTPS и проксирует frontend-приложение. `frontend-prod` не публикует собственный порт наружу и доступен только внутри Docker-сети.
+
+Сети в `docker-compose.yml` разделены на `frontend_public`, `frontend_api` и зарезервированную `backend_private` для будущих backend/db/redis сервисов.
 
 ## Проверки
 
@@ -82,8 +95,8 @@ docker compose run --rm frontend-e2e
 
 ```bash
 cd frontend
-docker compose up --build -d frontend-prod
-curl -I http://localhost:8080
+docker compose up --build -d nginx
+curl -k -I https://localhost
 docker compose down
 ```
 
