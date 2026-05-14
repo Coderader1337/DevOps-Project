@@ -152,7 +152,7 @@ export function ChatWorkspace({
 
     const content = draftMessage.trim();
 
-    if (!content || !activeChatId || isSending) {
+    if (!content || isSending || isLoading) {
       return;
     }
 
@@ -161,13 +161,16 @@ export function ChatWorkspace({
       setIsSending(true);
       setDraftMessage('');
 
+      const targetChatId = activeChatId ?? (await storage.createChat()).id;
       const userMessage = await storage.addMessage({
-        chatId: activeChatId,
+        chatId: targetChatId,
         role: 'user',
         content,
       });
-      const nextMessages = [...messages, userMessage];
+      const baseMessages = activeChatId ? messages : [];
+      const nextMessages = [...baseMessages, userMessage];
 
+      setActiveChatId(targetChatId);
       setMessages(nextMessages);
       setChats(await storage.listChats());
 
@@ -179,7 +182,7 @@ export function ChatWorkspace({
         completion.choices[0]?.message.content.trim() ||
         'Не удалось получить текст ответа.';
       const assistantMessage = await storage.addMessage({
-        chatId: activeChatId,
+        chatId: targetChatId,
         role: 'assistant',
         content: assistantContent,
       });
@@ -193,7 +196,7 @@ export function ChatWorkspace({
     }
   }
 
-  const canSendMessage = Boolean(activeChatId && draftMessage.trim() && !isSending);
+  const canSendMessage = Boolean(draftMessage.trim() && !isSending && !isLoading);
 
   return (
     <main className="min-h-screen bg-paper-50 text-ink-950">
@@ -309,7 +312,13 @@ export function ChatWorkspace({
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
               {!activeChat ? (
-                <EmptyChatState text="Создайте новый чат в боковой панели, чтобы начать работу." />
+                <StartChatState
+                  canSendMessage={canSendMessage}
+                  draftMessage={draftMessage}
+                  isSending={isSending}
+                  onDraftMessageChange={setDraftMessage}
+                  onSubmit={handleSubmitMessage}
+                />
               ) : messages.length > 0 ? (
                 <div className="mx-auto flex max-w-3xl flex-col gap-4">
                   {messages.map((message) => (
@@ -328,42 +337,20 @@ export function ChatWorkspace({
               </div>
             ) : null}
 
-            <form
-              className="border-t border-ink-950/10 bg-paper-50 px-4 py-4 lg:px-6"
-              onSubmit={handleSubmitMessage}
-            >
-              <div className="mx-auto flex max-w-3xl gap-3">
-                <label className="sr-only" htmlFor="chat-message-input">
-                  Сообщение
-                </label>
-                <textarea
-                  className="min-h-12 flex-1 resize-none rounded-panel border border-ink-950/15 bg-white px-4 py-3 text-sm leading-6 text-ink-950 shadow-sm transition placeholder:text-ink-700/50 focus:border-moss-600"
-                  disabled={!activeChat || isSending}
-                  id="chat-message-input"
-                  onChange={(event) => setDraftMessage(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault();
-                      event.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                  placeholder={
-                    activeChat
-                      ? 'Введите сообщение'
-                      : 'Сначала создайте или выберите чат'
-                  }
-                  rows={1}
-                  value={draftMessage}
+            {activeChat ? (
+              <form
+                className="border-t border-ink-950/10 bg-paper-50 px-4 py-4 lg:px-6"
+                onSubmit={handleSubmitMessage}
+              >
+                <MessageComposer
+                  canSendMessage={canSendMessage}
+                  draftMessage={draftMessage}
+                  isSending={isSending}
+                  onDraftMessageChange={setDraftMessage}
+                  placeholder="Введите сообщение"
                 />
-                <button
-                  className="h-12 rounded-panel bg-moss-600 px-5 text-sm font-semibold text-paper-50 transition hover:bg-moss-500 disabled:cursor-not-allowed disabled:bg-ink-700/30 disabled:text-ink-700/60"
-                  disabled={!canSendMessage}
-                  type="submit"
-                >
-                  Отправить
-                </button>
-              </div>
-            </form>
+              </form>
+            ) : null}
           </div>
         </section>
       </div>
@@ -380,6 +367,85 @@ function EmptyChatState({ text }: { text: string }) {
         </p>
         <p className="mt-3 text-base leading-7 text-ink-700">{text}</p>
       </div>
+    </div>
+  );
+}
+
+interface StartChatStateProps {
+  canSendMessage: boolean;
+  draftMessage: string;
+  isSending: boolean;
+  onDraftMessageChange(value: string): void;
+  onSubmit(event: FormEvent<HTMLFormElement>): void;
+}
+
+function StartChatState({
+  canSendMessage,
+  draftMessage,
+  isSending,
+  onDraftMessageChange,
+  onSubmit,
+}: StartChatStateProps) {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <form className="w-full max-w-3xl" onSubmit={onSubmit}>
+        <MessageComposer
+          canSendMessage={canSendMessage}
+          draftMessage={draftMessage}
+          inputId="start-chat-message-input"
+          isSending={isSending}
+          onDraftMessageChange={onDraftMessageChange}
+          placeholder="Введите сообщение, чтобы начать чат"
+        />
+      </form>
+    </div>
+  );
+}
+
+interface MessageComposerProps {
+  canSendMessage: boolean;
+  draftMessage: string;
+  inputId?: string;
+  isSending: boolean;
+  onDraftMessageChange(value: string): void;
+  placeholder: string;
+}
+
+function MessageComposer({
+  canSendMessage,
+  draftMessage,
+  inputId = 'chat-message-input',
+  isSending,
+  onDraftMessageChange,
+  placeholder,
+}: MessageComposerProps) {
+  return (
+    <div className="mx-auto flex max-w-3xl gap-3">
+      <label className="sr-only" htmlFor={inputId}>
+        Сообщение
+      </label>
+      <textarea
+        className="min-h-12 flex-1 resize-none rounded-panel border border-ink-950/15 bg-white px-4 py-3 text-sm leading-6 text-ink-950 shadow-sm transition placeholder:text-ink-700/50 focus:border-moss-600"
+        disabled={isSending}
+        id={inputId}
+        onChange={(event) => onDraftMessageChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
+        placeholder={placeholder}
+        rows={1}
+        value={draftMessage}
+      />
+      <button
+        className="h-12 rounded-panel bg-moss-600 px-5 text-sm font-semibold text-paper-50 transition hover:bg-moss-500 disabled:cursor-not-allowed disabled:bg-ink-700/30 disabled:text-ink-700/60"
+        disabled={!canSendMessage}
+        type="submit"
+      >
+        Отправить
+      </button>
     </div>
   );
 }

@@ -29,3 +29,20 @@ test('user can create a chat and receive a mock assistant response', async ({
     page.getByRole('button', { name: /^Привет, ассистент/ }),
   ).toHaveAttribute('aria-current', 'page');
 });
+
+test('user can start a chat from the empty workspace input', async ({ page }) => {
+  await expect(page.getByText('Диалоги появятся здесь.')).toBeVisible();
+
+  await page.getByLabel('Сообщение').fill('Старт из пустого экрана');
+  await page.getByRole('button', { name: 'Отправить' }).click();
+
+  await expect(page.getByText('Ассистент отвечает...')).toBeVisible();
+  await expect(page.getByText('Старт из пустого экрана')).toHaveCount(3);
+  await expect(
+    page.getByText('Mock-ответ ассистента на сообщение: "Старт из пустого экрана"'),
+  ).toBeVisible();
+
+  await expect(
+    page.getByRole('button', { name: /^Старт из пустого экрана/ }),
+  ).toHaveAttribute('aria-current', 'page');
+});

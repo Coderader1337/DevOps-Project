@@ -72,6 +72,42 @@ describe('ChatWorkspace messages', () => {
     );
   });
 
+  it('creates a chat when user sends a message without active chat', async () => {
+    const user = userEvent.setup();
+    const assistantApi = createAssistantApi(async () =>
+      createAssistantResponse('Чат создан из первого сообщения.'),
+    );
+
+    render(<ChatWorkspace assistantApi={assistantApi} storage={createStorage()} />);
+
+    const messageInput = screen.getByLabelText(/сообщение/i);
+
+    expect(messageInput).toBeEnabled();
+
+    await user.type(messageInput, 'Старт без выбранного чата');
+    await user.click(screen.getByRole('button', { name: /отправить/i }));
+
+    expect(
+      await screen.findByRole('button', { name: /^Старт без выбранного чата/i }),
+    ).toHaveAttribute('aria-current', 'page');
+    expect(screen.getAllByText('Старт без выбранного чата').length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      await screen.findByText('Чат создан из первого сообщения.'),
+    ).toBeInTheDocument();
+    expect(assistantApi.createChatCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            role: 'user',
+            content: 'Старт без выбранного чата',
+          }),
+        ],
+      }),
+    );
+  });
+
   it('does not send an empty message', async () => {
     const user = userEvent.setup();
     const assistantApi = createAssistantApi(async () => createAssistantResponse());
