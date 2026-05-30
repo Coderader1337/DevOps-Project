@@ -1,0 +1,17 @@
+node_modules
+dist
+coverage
+.vite
+.git
+.env
+.env.local
+.env.*.local
+certs/*.crt
+certs/*.key
+certs/*.pem
+playwright-report
+test-results
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
