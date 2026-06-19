@@ -64,6 +64,67 @@ https://localhost
 docker compose down
 ```
 
+## Доступ с другого устройства
+
+Локально приложение доступно на:
+
+```text
+http://localhost:8080
+```
+
+Чтобы открыть его с устройства вне локальной сети, запустите Cloudflare Tunnel:
+
+```bash
+docker compose --profile public up -d cloudflared
+docker compose logs -f cloudflared
+```
+
+Для MPS/host Ollama режима используйте:
+
+```bash
+docker compose -f docker-compose.mps.yml --profile public up -d cloudflared
+docker compose -f docker-compose.mps.yml logs -f cloudflared
+```
+
+В логах появится публичная ссылка вида:
+
+```text
+https://example.trycloudflare.com
+```
+
+Откройте эту ссылку на другом устройстве. Туннель временный: после перезапуска
+`cloudflared` ссылка может измениться. Не публикуйте ссылку, если не хотите,
+чтобы посторонние могли открыть ваш чат.
+
+Если Cloudflare Tunnel не может подключиться из-за ограничений сети, используйте
+fallback через localtunnel:
+
+```bash
+docker compose -f docker-compose.mps.yml --profile public-lt up -d localtunnel
+docker compose -f docker-compose.mps.yml logs -f localtunnel
+```
+
+В логах будет URL вида `https://example.loca.lt`.
+
+Если нужен именно публичный адрес с портом, запустите TCP-туннель через bore:
+
+```bash
+docker compose -f docker-compose.mps.yml --profile public-port up -d bore
+docker compose -f docker-compose.mps.yml logs -f bore
+```
+
+В логах будет адрес вида:
+
+```text
+bore.pub:12345
+```
+
+На телефоне открывайте:
+
+```text
+http://bore.pub:12345
+```
+
 Сервис `nginx` принимает внешние HTTP/HTTPS-запросы на портах `80` и `443`, перенаправляет HTTP на HTTPS и проксирует frontend-приложение. `frontend-prod` не публикует собственный порт наружу и доступен только внутри Docker-сети.
 
 Сети в `docker-compose.yml` разделены на `frontend_public`, `frontend_api` и зарезервированную `backend_private` для будущих backend/db/redis сервисов.

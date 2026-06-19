@@ -7,11 +7,63 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "0.0.0.0:8080:8080"
     volumes:
       - ./frontend/nginx/edge.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - app_network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles:
+      - public
+    depends_on:
+      nginx:
+        condition: service_started
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --protocol
+      - http2
+      - --url
+      - http://nginx:8080
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  localtunnel:
+    image: node:20-alpine
+    profiles:
+      - public-lt
+    depends_on:
+      nginx:
+        condition: service_started
+    command:
+      - sh
+      - -c
+      - npx --yes localtunnel --local-host nginx --port 8080
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  bore:
+    image: ekzhang/bore:latest
+    platform: linux/amd64
+    profiles:
+      - public-port
+    depends_on:
+      nginx:
+        condition: service_started
+    command:
+      - local
+      - "8080"
+      - --local-host
+      - nginx
+      - --to
+      - bore.pub
+    networks:
+      - app_network
+    restart: unless-stopped
 
   frontend:
     build:
@@ -51,7 +103,7 @@ services:
     expose:
       - "8080"
     ports:
-      - "8000:8080"
+      - "0.0.0.0:8000:8080"
     healthcheck:
       test:
         [
