@@ -1,59 +1,9 @@
-<<<<<<< HEAD
-import os
-import json
-from typing import Dict, Any
-
-from fastapi import FastAPI, HTTPException
-
-from langchain_ollama import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.chat_history import InMemoryChatMessageHistory
-
-from working_classes import *
-from agent_main import agent
-
-api = FastAPI(title="Ollama Backend")
-
-
-chat_histories: Dict[str, InMemoryChatMessageHistory] = {}
-
-
-@api.get("/health")
-async def health():
-    return {
-        "status": "ok",
-        "ollama_base_url": os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
-        "model": os.getenv("OLLAMA_MODEL", "llama3.2:3b"),
-    }
-
-
-
-@api.post("/chat", response_model=ChatResponse)
-async def post_message(request: ChatRequest):
-    try:
-        
-        response = await agent.ainvoke(
-            {"message":request.message}
-        )
-
-        return {
-            "message": response,
-            "model":os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        }
-    except:
-        return {
-            "message" : "Error:200",
-            "model":os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        }
-
-
-=======
 import asyncio
 import logging
 import os
 import time
 import uuid
+from collections import defaultdict, deque
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -86,6 +36,10 @@ except ImportError:
 
 api = FastAPI(title="AI Chat Backend")
 logger = logging.getLogger("backend.chat")
+LEGACY_SESSION_MAX_MESSAGES = int(os.getenv("LEGACY_SESSION_MAX_MESSAGES", "80"))
+legacy_chat_memory: defaultdict[str, deque[ChatCompletionMessage]] = defaultdict(
+    lambda: deque(maxlen=LEGACY_SESSION_MAX_MESSAGES)
+)
 
 allowed_origins = [
     origin.strip()
@@ -184,7 +138,11 @@ async def create_chat_completion(
 
     for attempt in range(3):
         try:
-            answer = await generate_assistant_reply(request.messages, request.model)
+            answer = await generate_assistant_reply(
+                request.messages,
+                request.model,
+                web_search=request.web_search,
+            )
             break
         except Exception as exc:
             last_error = exc
@@ -224,15 +182,19 @@ async def create_chat_completion(
 @api.post("/chat", response_model=ChatResponse)
 async def post_message(request: ChatRequest) -> ChatResponse:
     message = ChatCompletionMessage(role="user", content=request.message)
+    session_messages = legacy_chat_memory[request.session_id]
+    session_messages.append(message)
+
     response = await create_chat_completion(
         ChatCompletionRequest(
             model=os.getenv("OLLAMA_MODEL", "default"),
-            messages=[message],
+            messages=list(session_messages),
+            web_search=False,
         )
     )
+    session_messages.append(response.choices[0].message)
 
     return ChatResponse(
         message=response.choices[0].message.content,
         model=response.model,
     )
->>>>>>> 39e2fbb (Working LLM)

@@ -1,9 +1,6 @@
-from pydantic import BaseModel, Field
-<<<<<<< HEAD
-from typing import Literal, Optional
-=======
 from typing import Literal
->>>>>>> 39e2fbb (Working LLM)
+
+from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
@@ -14,8 +11,6 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     model: str
-<<<<<<< HEAD
-=======
 
 
 ChatCompletionRole = Literal["system", "user", "assistant"]
@@ -30,6 +25,7 @@ class ChatCompletionMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: str = Field(default="default", min_length=1)
     messages: list[ChatCompletionMessage] = Field(..., min_length=1)
+    web_search: bool = False
 
 
 class ChatCompletionChoice(BaseModel):
@@ -54,4 +50,3 @@ class ApiError(BaseModel):
 
 class ApiErrorResponse(BaseModel):
     error: ApiError
->>>>>>> 39e2fbb (Working LLM)
