@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import {
+  ApiRequestError,
   createAssistantApi,
   runtimeConfig,
   type AssistantApi,
@@ -189,8 +190,8 @@ export function ChatWorkspace({
 
       setMessages([...nextMessages, assistantMessage]);
       setChats(await storage.listChats());
-    } catch {
-      setError('Не удалось получить ответ ассистента. Попробуйте еще раз.');
+    } catch (requestError) {
+      setError(getAssistantErrorMessage(requestError));
     } finally {
       setIsSending(false);
     }
@@ -492,4 +493,17 @@ function toChatCompletionMessages(messages: Message[]): ChatCompletionMessage[] 
     role: message.role,
     content: message.content,
   }));
+}
+
+function getAssistantErrorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError) {
+    const code = error.code ? `, code: ${error.code}` : '';
+    return `Не удалось получить ответ ассистента: HTTP ${error.status}${code}.`;
+  }
+
+  if (error instanceof Error) {
+    return `Не удалось получить ответ ассистента: ${error.message}`;
+  }
+
+  return 'Не удалось получить ответ ассистента. Попробуйте еще раз.';
 }

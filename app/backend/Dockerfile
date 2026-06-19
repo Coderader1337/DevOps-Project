@@ -7,7 +7,16 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend_main.py .
+<<<<<<< HEAD
 COPY working_classes.py .
 EXPOSE 8000
 
 CMD ["uvicorn", "backend_main:api", "--host", "0.0.0.0", "--port", "8000"]
+=======
+COPY agent_main.py .
+COPY agent_tools.py .
+COPY working_classes.py .
+EXPOSE 8080
+
+CMD ["uvicorn", "backend_main:api", "--host", "0.0.0.0", "--port", "8080"]
+>>>>>>> 39e2fbb (Working LLM)
