@@ -1,198 +1,352 @@
-# DevOps Project
+# DevOps AI Chat: описание проекта
 
-## Структура проекта
+## 1. Возможности
 
-## Frontend
+DevOps AI Chat - это локально разворачиваемое AI-chat приложение с frontend,
+backend, LLM-сервисом и reverse proxy.
 
-Стек:
+Основные возможности:
+
+- диалоговый chat UI с локальной историей чатов в браузере;
+- создание, удаление и очистка истории чатов;
+- OpenAI-compatible-like endpoint `POST /api/chat/completions`;
+- подключение локальной LLM через Ollama;
+- режим host Ollama для MacBook с Metal/MPS ускорением;
+- явный web search режим через кнопку `Поиск` в интерфейсе;
+- MCP tools для web search/fetch через backend;
+- диалоговая память: backend получает историю сообщений, а при превышении лимита сжимает старую часть диалога в summary;
+- runtime context для даты, времени и timezone;
+- запуск через Docker Compose;
+- единая точка входа через nginx на `http://localhost:8080`;
+- доступ из локальной сети через `http://LAN_IP:8080`
+
+
+## 2. Технологический стек
+
+Frontend:
 
 - React;
-- Vite;
 - TypeScript;
+- Vite;
 - Tailwind CSS;
-- Vitest;
-- React Testing Library;
-- jsdom;
-- Playwright;
-- Docker Compose.
+- localStorage как MVP-хранилище истории;
+- Vitest и React Testing Library;
+- Playwright для e2e-тестов.
 
-Перейти в frontend:
+Backend:
 
-```bash
-cd frontend
-```
+- Python;
+- FastAPI;
+- Pydantic;
+- Uvicorn;
+- LangChain;
+- LangChain Ollama;
+- LangChain MCP adapters;
+- MCP tools для интернет-поиска и fetch;
+- in-memory session memory для legacy endpoint `/chat`;
+- compaction/summarization старого контекста перед вызовом LLM.
 
-Запустить dev-сервер:
+Model layer:
 
-```bash
-docker compose up frontend-dev
-```
+- Ollama;
+- основная модель по умолчанию: `qwen2.5:14b`;
+- container Ollama для обычного compose;
+- host Ollama для MacBook/MPS через `docker-compose.mps.yml`.
 
-Приложение будет доступно по адресу:
+Infrastructure:
 
-```text
-http://localhost:5173
-```
+- Docker;
+- Docker Compose;
+- nginx как edge proxy;
+- Cloudflare Tunnel, localtunnel и bore как опциональные публичные туннели.
 
-Создать локальный самоподписанный TLS-сертификат для edge nginx:
+## 3. Архитектура
 
-```bash
-mkdir -p certs
-openssl req -x509 -nodes -newkey rsa:2048 \
-  -keyout certs/local.key \
-  -out certs/local.crt \
-  -days 365 \
-  -subj "/CN=localhost"
-chmod 0444 certs/local.crt certs/local.key
-```
-
-Запустить production-сборку через единую nginx-точку входа:
-
-```bash
-docker compose up --build nginx
-```
-
-Production-версия будет доступна по адресу:
+### Компоненты
 
 ```text
-https://localhost
+Browser
+  |
+  | HTTP :8080
+  v
+nginx edge proxy
+  |---------------------> frontend nginx container
+  |
+  | /api/*
+  v
+FastAPI backend
+  |
+  | LangChain / HTTP
+  v
+Ollama
+  |
+  v
+qwen2.5:14b
 ```
 
-Остановить контейнеры:
+В MPS-режиме Ollama запускается не в Docker, а на macOS host:
+
+```text
+FastAPI backend container
+  |
+  | http://host.docker.internal:11434
+  v
+Host Ollama on MacBook
+```
+
+### Поток сообщения
+
+1. Пользователь вводит сообщение во frontend.
+2. Frontend сохраняет сообщение в локальную историю чата.
+3. Frontend отправляет текущий контекст сообщений на backend:
+
+```http
+POST /api/chat/completions
+```
+
+4. Backend валидирует запрос.
+5. Backend проверяет размер контекста.
+6. Если контекст большой, backend сжимает старые сообщения в summary.
+7. Backend добавляет системный runtime context с датой, временем и timezone.
+8. Если в UI включена кнопка `Поиск`, backend получает web context через MCP search tool.
+9. Backend отправляет подготовленные сообщения в Ollama.
+10. Backend возвращает ответ в OpenAI-compatible-like формате.
+11. Frontend сохраняет ответ ассистента локально.
+
+### Память диалога
+
+Frontend хранит историю чата локально и при каждом запросе отправляет backend весь
+доступный контекст. Backend дополнительно защищает LLM от слишком большого
+контекста:
+
+- `MEMORY_CONTEXT_CHAR_BUDGET=24000` - примерный лимит размера истории;
+- `MEMORY_RECENT_MESSAGES=12` - количество свежих сообщений, которые сохраняются без сжатия;
+- `MEMORY_SUMMARY_TARGET_CHARS=4000` - целевой размер summary старых сообщений.
+
+Если история превышает лимит, старые сообщения превращаются в системную память,
+а последние сообщения остаются в исходном виде.
+
+### Интернет-поиск
+
+Поиск не включается автоматически по ключевым словам. Он включается только явно,
+когда пользователь нажимает кнопку `Поиск` в UI. Frontend отправляет:
+
+```json
+{
+  "web_search": true
+}
+```
+
+Backend при этом вызывает MCP DuckDuckGo search tool и добавляет результаты как
+дополнительный контекст перед вызовом LLM.
+
+## 4. Версии библиотек
+
+### Docker images
+
+| Компонент | Версия |
+| --- | --- |
+| Backend base image | `python:3.12-slim` |
+| Frontend build image | `node:20-alpine` |
+| Frontend runtime image | `nginxinc/nginx-unprivileged:1.27-alpine` |
+| Model image | `ollama/ollama:0.20.5` |
+| Public TCP tunnel | `ekzhang/bore:latest` |
+| Cloudflare tunnel | `cloudflare/cloudflared:latest` |
+
+### Frontend dependencies
+
+| Библиотека | Версия |
+| --- | --- |
+| `react` | `^18.3.1` |
+| `react-dom` | `^18.3.1` |
+| `@vitejs/plugin-react` | `^4.3.4` |
+
+### Frontend devDependencies
+
+| Библиотека | Версия |
+| --- | --- |
+| `@playwright/test` | `^1.59.1` |
+| `@testing-library/jest-dom` | `^6.6.3` |
+| `@testing-library/react` | `^16.1.0` |
+| `@testing-library/user-event` | `^14.5.2` |
+| `@types/node` | `^22.10.2` |
+| `@types/react` | `^18.3.18` |
+| `@types/react-dom` | `^18.3.5` |
+| `autoprefixer` | `^10.4.20` |
+| `jsdom` | `^25.0.1` |
+| `postcss` | `^8.4.49` |
+| `tailwindcss` | `^3.4.17` |
+| `typescript` | `~5.7.2` |
+| `vite` | `^5.4.11` |
+| `vitest` | `^2.1.8` |
+
+### Backend dependencies
+
+В `app/backend/requirements.txt` версии не закреплены. Фактические версии в
+текущем backend image:
+
+| Библиотека | Версия |
+| --- | --- |
+| `fastapi` | `0.137.2` |
+| `uvicorn` | `0.49.0` |
+| `pydantic` | `2.13.4` |
+| `langchain` | `1.3.10` |
+| `langchain-ollama` | `1.1.0` |
+| `langchain-mcp-adapters` | `0.3.0` |
+| `langgraph` | `1.2.6` |
+| `uv` | `0.11.23` |
+
+Root Flask demo app dependencies:
+
+| Библиотека | Версия |
+| --- | --- |
+| `flask` | `3.1.3` |
+| `gunicorn` | `22.0.0` |
+
+Проверить фактические версии backend:
 
 ```bash
-docker compose down
+docker run --rm devops-project-backend python -m pip freeze
 ```
 
-## Доступ с другого устройства
+## 5. Как запустить приложение
 
-Локально приложение доступно на:
+### Вариант A: запуск полностью в Docker Compose
+
+Этот режим поднимает `nginx`, `frontend`, `backend` и container Ollama.
+
+```bash
+docker compose up --build -d
+```
+
+Открыть:
 
 ```text
 http://localhost:8080
 ```
 
-Чтобы открыть его с устройства вне локальной сети, запустите Cloudflare Tunnel:
+Проверить backend:
 
 ```bash
-docker compose --profile public up -d cloudflared
-docker compose logs -f cloudflared
+curl http://localhost:8080/api/health
 ```
 
-Для MPS/host Ollama режима используйте:
+Остановить:
 
 ```bash
-docker compose -f docker-compose.mps.yml --profile public up -d cloudflared
-docker compose -f docker-compose.mps.yml logs -f cloudflared
+docker compose down
 ```
 
-В логах появится публичная ссылка вида:
+### Вариант B: запуск на MacBook с Ollama на MPS/Metal
+
+Этот режим рекомендуется для MacBook, потому что Docker на macOS не дает
+Ollama нормальный доступ к Metal/MPS.
+
+1. Установить и запустить Ollama на macOS.
+2. Скачать модель:
+
+```bash
+ollama pull qwen2.5:14b
+```
+
+3. Поднять frontend, backend и nginx:
+
+```bash
+docker compose -f docker-compose.mps.yml up --build -d
+```
+
+4. Открыть:
 
 ```text
-https://example.trycloudflare.com
+http://localhost:8080
 ```
 
-Откройте эту ссылку на другом устройстве. Туннель временный: после перезапуска
-`cloudflared` ссылка может измениться. Не публикуйте ссылку, если не хотите,
-чтобы посторонние могли открыть ваш чат.
-
-Если Cloudflare Tunnel не может подключиться из-за ограничений сети, используйте
-fallback через localtunnel:
+5. Проверить:
 
 ```bash
-docker compose -f docker-compose.mps.yml --profile public-lt up -d localtunnel
-docker compose -f docker-compose.mps.yml logs -f localtunnel
+curl http://localhost:8080/api/health
 ```
 
-В логах будет URL вида `https://example.loca.lt`.
+### Доступ с телефона в той же локальной сети
 
-Если нужен именно публичный адрес с портом, запустите TCP-туннель через bore:
+Узнать LAN IP MacBook:
+
+```bash
+./scripts/lan-url.sh
+```
+
+Пример:
+
+```text
+http://192.168.1.72:8080
+```
+
+Телефон должен быть в той же сети, а сеть не должна блокировать client-to-client
+доступ.
+
+### Публичный доступ из интернета через host:port
+
+Для доступа не из локальной сети используйте `bore`:
 
 ```bash
 docker compose -f docker-compose.mps.yml --profile public-port up -d bore
 docker compose -f docker-compose.mps.yml logs -f bore
 ```
 
-В логах будет адрес вида:
+В логах будет строка:
 
 ```text
-bore.pub:12345
+listening at bore.pub:63139
 ```
 
-На телефоне открывайте:
+Открывать с телефона:
 
 ```text
-http://bore.pub:12345
+http://bore.pub:63139
 ```
 
-Сервис `nginx` принимает внешние HTTP/HTTPS-запросы на портах `80` и `443`, перенаправляет HTTP на HTTPS и проксирует frontend-приложение. `frontend-prod` не публикует собственный порт наружу и доступен только внутри Docker-сети.
-
-Сети в `docker-compose.yml` разделены на `frontend_public`, `frontend_api` и зарезервированную `backend_private` для будущих backend/db/redis сервисов.
-
-## Проверки
-
-Сборка внутри dev-контейнера:
+Остановить публичный доступ:
 
 ```bash
-cd frontend
-docker compose run --rm frontend-dev npm run build
+docker compose -f docker-compose.mps.yml stop bore
 ```
 
-Тесты внутри dev-контейнера:
+После перезапуска `bore` порт может измениться.
+
+### Альтернативные публичные туннели
+
+Cloudflare Tunnel:
 
 ```bash
-cd frontend
-docker compose run --rm frontend-dev npm run test
+docker compose -f docker-compose.mps.yml --profile public up -d cloudflared
+docker compose -f docker-compose.mps.yml logs -f cloudflared
 ```
 
-E2E-тесты в согласованном Playwright-контейнере:
+localtunnel:
 
 ```bash
-cd frontend
-docker compose run --rm frontend-e2e
+docker compose -f docker-compose.mps.yml --profile public-lt up -d localtunnel
+docker compose -f docker-compose.mps.yml logs -f localtunnel
 ```
 
-Проверка production-контейнера:
+### Проверки
+
+Backend tests:
 
 ```bash
-cd frontend
-docker compose up --build -d nginx
-curl -k -I https://localhost
-docker compose down
+docker run --rm -v "$PWD":/src -w /src devops-project-backend \
+  sh -lc 'python -m pip install -q -r requirements.txt pytest httpx && python -m pytest'
 ```
 
-Локально, без Docker:
+Frontend build:
 
 ```bash
-cd frontend
-npm install
-npm run dev
-npm run build
-npm run test
-npm run test:e2e
+docker compose build frontend
 ```
 
-Перед каждым e2e-сценарием локальное состояние приложения очищается, поэтому тест начинается с пустой истории чатов.
+Compose config validation:
 
-## Переменные окружения frontend
-
-Файл примера находится в [frontend/.env.example].
-
-```text
-VITE_API_MODE=mock
-VITE_HISTORY_MODE=local
-VITE_API_BASE_URL=http://localhost:8080
-VITE_DEFAULT_MODEL=default
+```bash
+docker compose config
+docker compose -f docker-compose.mps.yml config
 ```
-
-- `VITE_API_MODE=mock|real` задает источник ответа ассистента.
-- `VITE_HISTORY_MODE=local|remote` задает источник истории чатов.
-- `VITE_DEFAULT_MODEL` задает модель для OpenAI-compatible-like запроса к backend.
-
-В dev-контейнере эти переменные передаются как runtime environment для Vite dev server.
-
-В production-контейнере Vite подставляет `VITE_*` на этапе `npm run build`. Поэтому для `frontend-prod` переменные передаются через Docker build args. Изменение `VITE_API_BASE_URL` после сборки nginx-контейнера не изменит уже собранный frontend. Runtime-конфигурация через отдельный `config.json` не входит в MVP.
-
-## API
-
-Контракт frontend/backend описан в [docs/api-contract.md].

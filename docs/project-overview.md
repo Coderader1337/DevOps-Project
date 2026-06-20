@@ -18,8 +18,8 @@ backend, LLM-сервисом и reverse proxy.
 - runtime context для даты, времени и timezone;
 - запуск через Docker Compose;
 - единая точка входа через nginx на `http://localhost:8080`;
-- доступ из локальной сети через `http://LAN_IP:8080`;
-- публичный доступ через tunnel-профили `cloudflared`, `localtunnel` или `bore`.
+- доступ из локальной сети через `http://LAN_IP:8080`
+
 
 ## 2. Технологический стек
 
