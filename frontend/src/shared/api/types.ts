@@ -8,6 +8,7 @@ export interface ChatCompletionMessage {
 export interface ChatCompletionRequest {
   model: string;
   messages: ChatCompletionMessage[];
+  web_search?: boolean;
 }
 
 export interface ChatCompletionChoice {

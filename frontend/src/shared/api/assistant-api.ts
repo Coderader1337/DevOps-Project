@@ -75,7 +75,8 @@ export class RestAssistantApi implements AssistantApi {
   async createChatCompletion(
     request: ChatCompletionRequest,
   ): Promise<ChatCompletionResponse> {
-    const response = await this.fetcher(
+    const response = await this.fetcher.call(
+      globalThis,
       `${this.apiBaseUrl}/api/chat/completions`,
       {
         method: 'POST',

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import {
+  ApiRequestError,
   createAssistantApi,
   runtimeConfig,
   type AssistantApi,
@@ -29,6 +30,7 @@ export function ChatWorkspace({
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draftMessage, setDraftMessage] = useState('');
+  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -177,6 +179,7 @@ export function ChatWorkspace({
       const completion = await assistantApi.createChatCompletion({
         model: runtimeConfig.defaultModel,
         messages: toChatCompletionMessages(nextMessages),
+        web_search: isWebSearchEnabled,
       });
       const assistantContent =
         completion.choices[0]?.message.content.trim() ||
@@ -189,8 +192,8 @@ export function ChatWorkspace({
 
       setMessages([...nextMessages, assistantMessage]);
       setChats(await storage.listChats());
-    } catch {
-      setError('Не удалось получить ответ ассистента. Попробуйте еще раз.');
+    } catch (requestError) {
+      setError(getAssistantErrorMessage(requestError));
     } finally {
       setIsSending(false);
     }
@@ -316,7 +319,9 @@ export function ChatWorkspace({
                   canSendMessage={canSendMessage}
                   draftMessage={draftMessage}
                   isSending={isSending}
+                  isWebSearchEnabled={isWebSearchEnabled}
                   onDraftMessageChange={setDraftMessage}
+                  onWebSearchToggle={setIsWebSearchEnabled}
                   onSubmit={handleSubmitMessage}
                 />
               ) : messages.length > 0 ? (
@@ -346,7 +351,9 @@ export function ChatWorkspace({
                   canSendMessage={canSendMessage}
                   draftMessage={draftMessage}
                   isSending={isSending}
+                  isWebSearchEnabled={isWebSearchEnabled}
                   onDraftMessageChange={setDraftMessage}
+                  onWebSearchToggle={setIsWebSearchEnabled}
                   placeholder="Введите сообщение"
                 />
               </form>
@@ -375,7 +382,9 @@ interface StartChatStateProps {
   canSendMessage: boolean;
   draftMessage: string;
   isSending: boolean;
+  isWebSearchEnabled: boolean;
   onDraftMessageChange(value: string): void;
+  onWebSearchToggle(value: boolean): void;
   onSubmit(event: FormEvent<HTMLFormElement>): void;
 }
 
@@ -383,7 +392,9 @@ function StartChatState({
   canSendMessage,
   draftMessage,
   isSending,
+  isWebSearchEnabled,
   onDraftMessageChange,
+  onWebSearchToggle,
   onSubmit,
 }: StartChatStateProps) {
   return (
@@ -394,7 +405,9 @@ function StartChatState({
           draftMessage={draftMessage}
           inputId="start-chat-message-input"
           isSending={isSending}
+          isWebSearchEnabled={isWebSearchEnabled}
           onDraftMessageChange={onDraftMessageChange}
+          onWebSearchToggle={onWebSearchToggle}
           placeholder="Введите сообщение, чтобы начать чат"
         />
       </form>
@@ -407,7 +420,9 @@ interface MessageComposerProps {
   draftMessage: string;
   inputId?: string;
   isSending: boolean;
+  isWebSearchEnabled: boolean;
   onDraftMessageChange(value: string): void;
+  onWebSearchToggle(value: boolean): void;
   placeholder: string;
 }
 
@@ -416,7 +431,9 @@ function MessageComposer({
   draftMessage,
   inputId = 'chat-message-input',
   isSending,
+  isWebSearchEnabled,
   onDraftMessageChange,
+  onWebSearchToggle,
   placeholder,
 }: MessageComposerProps) {
   return (
@@ -439,6 +456,19 @@ function MessageComposer({
         rows={1}
         value={draftMessage}
       />
+      <button
+        aria-pressed={isWebSearchEnabled}
+        className={`h-12 rounded-panel border px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+          isWebSearchEnabled
+            ? 'border-moss-600 bg-moss-600 text-paper-50'
+            : 'border-ink-950/15 bg-white text-ink-800 hover:border-moss-600 hover:text-moss-700'
+        }`}
+        disabled={isSending}
+        onClick={() => onWebSearchToggle(!isWebSearchEnabled)}
+        type="button"
+      >
+        Поиск
+      </button>
       <button
         className="h-12 rounded-panel bg-moss-600 px-5 text-sm font-semibold text-paper-50 transition hover:bg-moss-500 disabled:cursor-not-allowed disabled:bg-ink-700/30 disabled:text-ink-700/60"
         disabled={!canSendMessage}
@@ -492,4 +522,17 @@ function toChatCompletionMessages(messages: Message[]): ChatCompletionMessage[] 
     role: message.role,
     content: message.content,
   }));
+}
+
+function getAssistantErrorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError) {
+    const code = error.code ? `, code: ${error.code}` : '';
+    return `Не удалось получить ответ ассистента: HTTP ${error.status}${code}.`;
+  }
+
+  if (error instanceof Error) {
+    return `Не удалось получить ответ ассистента: ${error.message}`;
+  }
+
+  return 'Не удалось получить ответ ассистента. Попробуйте еще раз.';
 }
