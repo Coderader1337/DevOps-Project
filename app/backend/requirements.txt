@@ -3,6 +3,6 @@ uvicorn[standard]
 pydantic
 langchain
 langchain-ollama
-langchain-mcp-adapters 
+langchain-mcp-adapters
 langgraph
 uv
